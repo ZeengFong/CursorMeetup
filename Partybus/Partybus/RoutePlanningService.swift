@@ -28,7 +28,8 @@ final class RoutePlanningService {
     private let maxPoiQueries = 10
     private let defaultDwell: Double = 10
 
-    private let poiFilter = MKPointOfInterestFilter(including: [
+    /// Broad fetch; narrow with these sets (some SDKs reject `MKPointOfInterestFilter(including:)`).
+    private let roadCategories: Set<MKPointOfInterestCategory> = [
         .park,
         .beach,
         .marina,
@@ -38,17 +39,17 @@ final class RoutePlanningService {
         .gasStation,
         .store,
         .museum,
-        .landmark
-    ])
+        .landmark,
+    ]
 
-    private let coolPOIFilter = MKPointOfInterestFilter(including: [
+    private let coolCategories: Set<MKPointOfInterestCategory> = [
         .landmark,
         .museum,
         .park,
         .beach,
         .marina,
-        .nationalPark
-    ])
+        .nationalPark,
+    ]
 
     func geocode(_ query: String) async throws -> MKMapItem {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -87,7 +88,7 @@ final class RoutePlanningService {
 
         for (idx, center) in samples.enumerated() where idx < maxPoiQueries {
             let poiRequest = MKLocalPointsOfInterestRequest(center: center, radius: poiSearchRadius)
-            poiRequest.pointOfInterestFilter = poiFilter
+            poiRequest.pointOfInterestFilter = .includingAll
 
             let searchRequest = MKLocalSearch.Request(pointOfInterestRequest: poiRequest)
             let search = MKLocalSearch(request: searchRequest)
@@ -95,6 +96,9 @@ final class RoutePlanningService {
 
             for item in response.mapItems {
                 let coord = item.placemark.coordinate
+                if let cat = item.pointOfInterestCategory {
+                    guard roadCategories.contains(cat) else { continue }
+                }
                 let key = dedupeKey(name: item.name, coordinate: coord)
                 guard seen.insert(key).inserted else { continue }
 
@@ -166,7 +170,7 @@ final class RoutePlanningService {
     func collectCoolPOIsAround(center: CLLocationCoordinate2D, radiusMeters: CLLocationDistance) async throws -> [MKMapItem] {
         let cappedRadius = min(max(radiusMeters, 2_000), 45_000)
         let request = MKLocalPointsOfInterestRequest(center: center, radius: cappedRadius)
-        request.pointOfInterestFilter = coolPOIFilter
+        request.pointOfInterestFilter = .includingAll
         let searchRequest = MKLocalSearch.Request(pointOfInterestRequest: request)
         let search = MKLocalSearch(request: searchRequest)
         let response = try await search.start()
@@ -177,6 +181,9 @@ final class RoutePlanningService {
 
         for item in response.mapItems {
             let coord = item.placemark.coordinate
+            if let cat = item.pointOfInterestCategory {
+                guard coolCategories.contains(cat) else { continue }
+            }
             guard CLLocation(latitude: coord.latitude, longitude: coord.longitude).distance(from: startLoc) > 400 else { continue }
             let key = dedupeKey(name: item.name, coordinate: coord)
             guard seen.insert(key).inserted else { continue }
