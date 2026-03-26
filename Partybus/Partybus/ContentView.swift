@@ -48,6 +48,7 @@ struct ContentView: View {
                 formSection
                 Divider()
                 mapSection
+                    .frame(maxHeight: .infinity)
                 Divider()
                 bottomSection
             }
@@ -199,7 +200,8 @@ struct ContentView: View {
                 .allowsHitTesting(true)
             }
         }
-        .frame(minHeight: 220)
+        .frame(maxWidth: .infinity, minWidth: 1, minHeight: 220)
+        .layoutPriority(1)
     }
 
     private var bottomSection: some View {
