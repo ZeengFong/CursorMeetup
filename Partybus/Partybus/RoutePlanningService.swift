@@ -90,12 +90,11 @@ final class RoutePlanningService {
             let poiRequest = MKLocalPointsOfInterestRequest(center: center, radius: poiSearchRadius)
             poiRequest.pointOfInterestFilter = .includingAll
 
-            let searchRequest = MKLocalSearch.Request(pointOfInterestRequest: poiRequest)
-            let search = MKLocalSearch(request: searchRequest)
+            let search = MKLocalSearch(request: poiRequest)
             let response = try await search.start()
 
             for item in response.mapItems {
-                let coord = item.placemark.coordinate
+                let coord = item.location.coordinate
                 if let cat = item.pointOfInterestCategory {
                     guard roadCategories.contains(cat) else { continue }
                 }
@@ -147,7 +146,7 @@ final class RoutePlanningService {
             if used + cost <= budgetMinutes {
                 let id = UUID()
                 let name = c.mapItem.name ?? "Stop"
-                let coord = c.mapItem.placemark.coordinate
+                let coord = c.mapItem.location.coordinate
                 result.append(
                     PlannedStop(
                         id: id,
@@ -171,8 +170,7 @@ final class RoutePlanningService {
         let cappedRadius = min(max(radiusMeters, 2_000), 45_000)
         let request = MKLocalPointsOfInterestRequest(center: center, radius: cappedRadius)
         request.pointOfInterestFilter = .includingAll
-        let searchRequest = MKLocalSearch.Request(pointOfInterestRequest: request)
-        let search = MKLocalSearch(request: searchRequest)
+        let search = MKLocalSearch(request: request)
         let response = try await search.start()
 
         var seen = Set<String>()
@@ -180,7 +178,7 @@ final class RoutePlanningService {
         var items: [MKMapItem] = []
 
         for item in response.mapItems {
-            let coord = item.placemark.coordinate
+            let coord = item.location.coordinate
             if let cat = item.pointOfInterestCategory {
                 guard coolCategories.contains(cat) else { continue }
             }
@@ -195,7 +193,7 @@ final class RoutePlanningService {
     func findCoolDestinationWithinBudget(start: MKMapItem, maxTravelSeconds: TimeInterval) async throws -> (destination: MKMapItem, route: MKRoute) {
         guard maxTravelSeconds > 0 else { throw PartybusError.invalidBudget }
 
-        let center = start.placemark.coordinate
+        let center = start.location.coordinate
         let hours = maxTravelSeconds / 3600
         let radiusMeters = min(max(hours * 65_000, 5_000), 45_000)
 
@@ -203,16 +201,15 @@ final class RoutePlanningService {
 
         if candidates.count < 8 {
             let wider = try await collectCoolPOIsAround(center: center, radiusMeters: 45_000)
-            var seen = Set(candidates.map { dedupeKey(name: $0.name, coordinate: $0.placemark.coordinate) })
-            for item in wider where seen.insert(dedupeKey(name: item.name, coordinate: item.placemark.coordinate)).inserted {
+            var seen = Set(candidates.map { dedupeKey(name: $0.name, coordinate: $0.location.coordinate) })
+            for item in wider where seen.insert(dedupeKey(name: item.name, coordinate: item.location.coordinate)).inserted {
                 candidates.append(item)
             }
         }
 
         let startLoc = CLLocation(latitude: center.latitude, longitude: center.longitude)
         candidates.sort {
-            startLoc.distance(from: CLLocation(latitude: $0.placemark.coordinate.latitude, longitude: $0.placemark.coordinate.longitude))
-                < startLoc.distance(from: CLLocation(latitude: $1.placemark.coordinate.latitude, longitude: $1.placemark.coordinate.longitude))
+            startLoc.distance(from: $0.location) < startLoc.distance(from: $1.location)
         }
 
         var best: (MKMapItem, MKRoute)?

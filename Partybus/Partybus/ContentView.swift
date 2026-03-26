@@ -352,7 +352,7 @@ struct ContentView: View {
                 baseTravelTime = route.expectedTravelTime
                 baseDistance = route.distance
                 dayTripDestinationTitle = dest.name ?? "Destination"
-                dayTripDestinationCoord = dest.placemark.coordinate
+                dayTripDestinationCoord = dest.location.coordinate
 
                 fitMap(to: coords, stops: [])
             } catch {
